@@ -3,7 +3,6 @@ FROM golang:1.10
 ENV SRCPATH "$GOPATH/src/github.com/monstarnn/docker-updater"
 
 RUN mkdir -p $SRCPATH
-COPY ./pkg "$SRCPATH/pkg"
 COPY ./main.go "$SRCPATH/main.go"
 COPY ./Gopkg* "$SRCPATH/"
 

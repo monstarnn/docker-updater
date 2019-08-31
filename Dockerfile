@@ -2,8 +2,7 @@ FROM monstarnn/docker-updater:base
 
 ENV SRCPATH "$GOPATH/src/github.com/monstarnn/docker-updater"
 
-COPY ./pkg "$SRCPATH/pkg"
-COPY ./docker-updater.go "$SRCPATH/docker-updater.go"
+COPY ./main.go "$SRCPATH/main.go"
 
 RUN cd $SRCPATH && go install -v
 
