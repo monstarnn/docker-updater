@@ -1,0 +1,12 @@
+FROM golang:1.10
+
+ENV SRCPATH "$GOPATH/src/github.com/monstarnn/docker-updater"
+
+RUN mkdir -p $SRCPATH
+COPY ./pkg "$SRCPATH/pkg"
+COPY ./main.go "$SRCPATH/main.go"
+COPY ./Gopkg* "$SRCPATH/"
+
+RUN curl https://raw.githubusercontent.com/golang/dep/master/install.sh | sh
+
+RUN cd $SRCPATH && dep ensure && go install -v
