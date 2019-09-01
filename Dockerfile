@@ -1,4 +1,4 @@
-FROM monstarnn/docker-updater:base
+FROM monstar/docker-updater:base
 
 ENV SRCPATH "$GOPATH/src/github.com/monstarnn/docker-updater"
 
