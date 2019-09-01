@@ -21,6 +21,7 @@ import (
 
 func main() {
 
+	// initialize web server
 	e := echo.New()
 	e.HideBanner = true
 	e.HTTPErrorHandler = func(err error, c echo.Context) {
@@ -53,7 +54,7 @@ func main() {
 	e.GET("/probe", probe)
 
 	address := ":8084"
-	logrus.Infof("Starting docker-updater API server on %s", address)
+	logrus.Infof("starting docker-updater API server on %s", address)
 	logrus.Fatal(e.Start(address))
 
 }
@@ -62,10 +63,12 @@ func probe(c echo.Context) error {
 	return c.String(http.StatusOK, "OK")
 }
 
+// testing update call: GET /api/v1/update?repo=REPO&tag=TAG
 func updManual(c echo.Context) error {
 	return _upd(c, c.QueryParam("repo"), c.QueryParam("tag"))
 }
 
+// prod update call: POST /api/v1/update
 func updByHook(c echo.Context) error {
 	var p push
 	if err := c.Bind(&p); err != nil {
@@ -84,6 +87,7 @@ func _upd(c echo.Context, repo, tag string) error {
 
 // ======= STRUCTURES ======
 
+// docker hub hook payload
 type push struct {
 	Data       pushData   `json:"push_data"`
 	Repository repository `json:"repository"`
@@ -109,7 +113,7 @@ func init() {
 	var err error
 	cli, err = client.NewEnvClient()
 	if err != nil {
-		logrus.Panicf("Unable to init docker client: %s", err.Error())
+		logrus.Panicf("unable to init docker client: %s", err.Error())
 	}
 	ctx = context.Background()
 }
@@ -125,7 +129,7 @@ func updateContainer(repo, tag string) error {
 	}
 
 	var fullRepo = fmt.Sprintf("%s:%s", repo, tag)
-	logrus.Infof("Updating repo %s...", fullRepo)
+	logrus.Infof("updating repo %s...", fullRepo)
 	containers, err := cli.ContainerList(ctx, types.ContainerListOptions{})
 	if err != nil {
 		return _err("get containers list error: %s", err.Error())
@@ -145,28 +149,36 @@ func updateContainer(repo, tag string) error {
 		}
 		if cRepo == repo {
 			var upd bool
+			var cVer, ver *semver.Version
+			var vErr error
 			if cTag == latest {
 				upd = tag == cTag
-				logrus.Infof("Needs to update %s:latest", cRepo)
 			} else {
-				cVer, cvErr := semver.NewVersion(cTag)
-				ver, vErr := semver.NewVersion(tag)
-				if cvErr == nil && vErr == nil {
-					upd = cVer.LessThan(ver)
-					logrus.Infof("Needs to update %s:%s -> %s", cRepo, cVer, ver)
+				if cVer, vErr = semver.NewVersion(cTag); err != nil {
+					logrus.Errorf("error parsing existing container tag %s: %s", cTag, vErr)
+					continue
 				}
+				if ver, vErr = semver.NewVersion(tag); err != nil {
+					logrus.Errorf("error parsing existing container tag %s: %s", tag, err)
+					continue
+				}
+				upd =
+					cVer.Prerelease() == ver.Prerelease() &&
+						cVer.Metadata() == ver.Metadata() &&
+						cVer.LessThan(ver)
 			}
 			if upd {
 				c := cnt
 				toUpdate = append(toUpdate, c)
+				logrus.Infof("to update %s:%s -> %s", cRepo, cVer.String(), ver.String())
 			}
 		}
 	}
 	if len(containerImages) > 0 {
-		logrus.Infof("Existing containers images: %s", strings.Join(containerImages, ", "))
+		logrus.Infof("existing containers images: %s", strings.Join(containerImages, ", "))
 	}
 	if len(toUpdate) == 0 {
-		logrus.Infof("No containers should be updated with image %s found, skipped", fullRepo)
+		logrus.Infof("no containers should be updated with image %s found, skipped", fullRepo)
 		return nil
 	}
 
@@ -174,17 +186,21 @@ func updateContainer(repo, tag string) error {
 	if err != nil {
 		return _err("parse container name %s error: %s", fullRepo, err.Error())
 	}
-	logrus.Infof("Pulling repo %s...", fullRepo)
+	logrus.Infof("pulling repo %s...", fullRepo)
 	pullStart := time.Now()
 	out, err := cli.ImagePull(ctx, pn.String(), types.ImagePullOptions{})
 	if err != nil {
 		return _err("pull image %s error: %s", fullRepo, err.Error())
 	}
-	defer out.Close()
-	io.Copy(ioutil.Discard, out)
-	logrus.Infof("Repo %s pulled for %v", fullRepo, time.Since(pullStart))
+	defer func() {
+		if err := out.Close(); err != nil {
+			logrus.Errorf("error closing image pooling: %s", err)
+		}
+	}()
+	_, _ = io.Copy(ioutil.Discard, out)
+	logrus.Infof("repo %s pulled for %v", fullRepo, time.Since(pullStart))
 
-	logrus.Infof("Restarting %d containers...", len(toUpdate))
+	logrus.Infof("restarting %d containers...", len(toUpdate))
 	for _, cnt := range toUpdate {
 		inspect, err := cli.ContainerInspect(ctx, cnt.ID)
 		if err != nil {
@@ -217,10 +233,10 @@ func updateContainer(repo, tag string) error {
 
 		inspect, err = cli.ContainerInspect(ctx, created.ID)
 		if prevImageId != inspect.Image {
-			logrus.Infof("Clearing previous not actual images for %s...", fullRepo)
+			logrus.Infof("clearing previous not actual images for %s...", fullRepo)
 			rm, err := cli.ImageRemove(ctx, prevImageId, types.ImageRemoveOptions{})
 			if err != nil {
-				logrus.Errorf("Remove previous image error: %s", err)
+				logrus.Errorf("remove previous image error: %s", err)
 			} else {
 				for _, rmi := range rm {
 					if rmi.Untagged != "" {
@@ -235,7 +251,7 @@ func updateContainer(repo, tag string) error {
 
 	}
 
-	logrus.Infof("Updating containers for repo %s done!", fullRepo)
+	logrus.Infof("updating containers for repo %s done!", fullRepo)
 	return nil
 
 }
