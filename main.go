@@ -154,12 +154,12 @@ func updateContainer(repo, tag string) error {
 			if cTag == latest {
 				upd = tag == cTag
 			} else {
-				if cVer, vErr = semver.NewVersion(cTag); err != nil {
+				if cVer, vErr = semver.NewVersion(cTag); vErr != nil {
 					logrus.Errorf("error parsing existing container tag %s: %s", cTag, vErr)
 					continue
 				}
-				if ver, vErr = semver.NewVersion(tag); err != nil {
-					logrus.Errorf("error parsing existing container tag %s: %s", tag, err)
+				if ver, vErr = semver.NewVersion(tag); vErr != nil {
+					logrus.Errorf("error parsing existing container tag %s: %s", tag, vErr)
 					continue
 				}
 				upd =
